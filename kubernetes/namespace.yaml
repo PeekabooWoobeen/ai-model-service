@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-model-service
+  labels:
+    name: ai-model-service
+    environment: production

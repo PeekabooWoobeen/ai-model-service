@@ -1,0 +1,83 @@
+name: Production Deployment
+
+on:
+  # main 브랜치에 push가 있을 때만 실행
+  push:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: ai-model-service-project
+  GKE_CLUSTER: ai-model-cluster
+  GKE_ZONE: asia-northeast3-a
+  BACKEND_IMAGE: asia-northeast3-docker.pkg.dev/$PROJECT_ID/ai-model-service/backend
+  FRONTEND_IMAGE: asia-northeast3-docker.pkg.dev/$PROJECT_ID/ai-model-service/frontend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. 코드 체크아웃
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    # 2. GCP 인증 설정
+    - name: Auth to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    # 3. Google Cloud CLI 설정
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+
+    # 4. Docker 인증 설정
+    - name: Configure Docker
+      run: |
+        gcloud auth configure-docker asia-northeast3-docker.pkg.dev
+
+    # 5. 백엔드 이미지 빌드 및 푸시
+    - name: Build and Push Backend
+      run: |
+        docker build -t ${{ env.BACKEND_IMAGE }}:${{ github.sha }} ./backend
+        docker push ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+        docker tag ${{ env.BACKEND_IMAGE }}:${{ github.sha }} ${{ env.BACKEND_IMAGE }}:latest
+        docker push ${{ env.BACKEND_IMAGE }}:latest
+
+    # 6. 프론트엔드 이미지 빌드 및 푸시
+    - name: Build and Push Frontend
+      run: |
+        docker build -t ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} ./frontend
+        docker push ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+        docker tag ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} ${{ env.FRONTEND_IMAGE }}:latest
+        docker push ${{ env.FRONTEND_IMAGE }}:latest
+
+    # 7. GKE 클러스터 인증 설정
+    - name: Get GKE Credentials
+      run: |
+        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} --zone ${{ env.GKE_ZONE }}
+
+    # 8. Kubernetes 설정 적용
+    - name: Deploy to GKE
+      run: |
+        # 시크릿 생성 (필요한 경우)
+        kubectl create secret generic app-secrets \
+          --from-literal=db-password=${{ secrets.DB_PASSWORD }} \
+          --from-literal=secret-key=${{ secrets.APP_SECRET }} \
+          -n ai-model-service \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+        # Kubernetes 설정 적용
+        kubectl apply -f kubernetes/namespace.yaml
+        kubectl apply -f kubernetes/database.yaml
+        kubectl apply -f kubernetes/backend.yaml
+        kubectl apply -f kubernetes/frontend.yaml
+        kubectl apply -f kubernetes/ingress.yaml
+
+    # 9. 배포 상태 확인
+    - name: Verify deployment
+      run: |
+        kubectl rollout status deployment/backend -n ai-model-service
+        kubectl rollout status deployment/frontend -n ai-model-service
