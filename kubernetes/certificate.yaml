@@ -1,0 +1,29 @@
+# File: kubernetes/certificate.yaml
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: ai-model-cert
+  namespace: ai-model-service
+spec:
+  domains:
+    - aimodel.example.com
+    - api.aimodel.example.com
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: ai-model-frontend-config
+  namespace: ai-model-service
+spec:
+  sslPolicy: ai-model-ssl-policy
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+apiVersion: cloud.google.com/v1
+kind: SslPolicy
+metadata:
+  name: ai-model-ssl-policy
+spec:
+  profile: MODERN
+  minTlsVersion: TLS_1_2
