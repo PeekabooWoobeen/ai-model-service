@@ -1,0 +1,8 @@
+fastapi==0.68.0
+uvicorn==0.15.0
+sqlalchemy==1.4.23
+python-jose[cryptography]
+torch==1.9.0
+transformers==4.9.2
+python-multipart
+cryptography==3.4.7
